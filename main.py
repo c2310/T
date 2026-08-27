@@ -117,13 +117,13 @@ def main():
             "PTT_DC_SALE", get_latest_ptt_post, all_states
         )
 
-    # 15分钟常规组：Threads、Yahoo拍卖
+    # 15分钟常规组：Threads、Yahoo
     if mode in ["--threads", "--slow", "--all"]:
         total_updates += check_platform(
             "Threads", get_threads_post, all_states
         )
         total_updates += check_platform(
-            "Yahoo拍卖", get_latest_yahoo_post, all_states
+            "Yahoo", get_latest_yahoo_post, all_states
         )
 
     save_all_states(all_states)
