@@ -8,6 +8,7 @@ from email.mime.text import MIMEText
 from fetchers.dcview import get_latest_dcview_post
 from fetchers.ptt import get_latest_ptt_post
 from fetchers.threads import get_latest_keyword_post as get_threads_post
+from fetchers.yahoo import get_latest_yahoo_post
 
 # ================= 全局关键词配置 =================
 TARGET_KEYWORDS = [
@@ -107,6 +108,7 @@ def main():
     all_states = load_all_states()
     total_updates = 0
 
+    # 5分钟高频组：DCView、PTT
     if mode in ["--fast", "--all"]:
         total_updates += check_platform(
             "DCView", get_latest_dcview_post, all_states
@@ -115,9 +117,13 @@ def main():
             "PTT_DC_SALE", get_latest_ptt_post, all_states
         )
 
-    if mode in ["--threads", "--all"]:
+    # 15分钟常规组：Threads、Yahoo拍卖
+    if mode in ["--threads", "--slow", "--all"]:
         total_updates += check_platform(
             "Threads", get_threads_post, all_states
+        )
+        total_updates += check_platform(
+            "Yahoo拍卖", get_latest_yahoo_post, all_states
         )
 
     save_all_states(all_states)
