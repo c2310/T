@@ -74,7 +74,11 @@ def check_platform(platform_name, fetch_func, all_states):
         state_key = f"{platform_name}_{keyword}"
         content, content_hash = fetch_func(keyword)
 
+        # 修改这里：如果没获取到数据，打印提示而非静默跳过
         if not content:
+            print(
+                f"  └─ ⚠️ 【{platform_name}】:【{keyword}】未能获取到有效数据（可能被拦截）。"
+            )
             continue
 
         last_hash = all_states.get(state_key, {}).get("hash")
