@@ -2,8 +2,8 @@ name: Threads Auto Monitor
 
 on:
   schedule:
-    # 每 30 分钟自动触发一次 (Cron 语法)
-    - cron: '*/30 * * * *'
+    # 每 16 分钟自动触发一次 (Cron 语法)
+    - cron: '*/16 * * * *'
   workflow_dispatch: # 允许在网页上点击按钮手动测试触发
 
 # 赋予程序写入保存状态文件的权限
