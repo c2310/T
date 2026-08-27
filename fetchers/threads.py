@@ -1,51 +1,34 @@
 import hashlib
-import json
 import re
 import urllib.parse
-from concurrent.futures import ThreadPoolExecutor
 import requests
 
 
-def _fetch_single_keyword(keyword):
-    """单条关键词抓取逻辑（缩短超时时间至 8 秒）"""
+def get_latest_keyword_post(keyword):
+    """抓取 Threads 最新关键词贴文"""
     encoded_keyword = urllib.parse.quote(keyword)
     url = f"https://www.threads.net/search?q={encoded_keyword}&serp_type=default"
 
     headers = {
         "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-            " (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
         ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "cross-site",
     }
 
     try:
-        response = requests.get(url, headers=headers, timeout=8)
+        response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
 
-        post_text = _extract_from_embedded_json(response.text)
-        if not post_text:
-            return keyword, None, None
-
-        post_hash = hashlib.md5(post_text.encode("utf-8")).hexdigest()
-        return keyword, post_text, post_hash
-    except Exception as e:
-        print(f"[Threads 抓取超时/异常] 关键词 '{keyword}': {e}")
-        return keyword, None, None
-
-
-def get_latest_keyword_post(keyword):
-    """保持向后兼容的单条抓取入口"""
-    _, text, post_hash = _fetch_single_keyword(keyword)
-    return text, post_hash
-
-
-def _extract_from_embedded_json(html):
-    """从页面 JSON 数据中提取贴文正文"""
-    try:
+        # 尝试正则提取嵌入在 HTML 中的 JSON 贴文正文
         scripts = re.findall(
             r'<script type="application/json"[^>]*>(.*?)</script>',
-            html,
+            response.text,
             re.DOTALL,
         )
         for script in scripts:
@@ -57,7 +40,13 @@ def _extract_from_embedded_json(html):
                     text = match.encode("utf-8").decode("unicode_escape")
                     text = text.replace("\\n", "\n").replace('\\"', '"').strip()
                     if len(text) > 5 and not text.startswith("http"):
-                        return text
-    except Exception:
-        pass
-    return None
+                        content = f"正文: {text}\n链接: {url}"
+                        content_hash = hashlib.md5(
+                            content.encode("utf-8")
+                        ).hexdigest()
+                        return content, content_hash
+
+        return None, None
+    except Exception as e:
+        print(f"[Threads 抓取异常] 关键词 '{keyword}': {e}")
+        return None, None
