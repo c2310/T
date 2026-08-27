@@ -1,11 +1,12 @@
 import hashlib
+import json
 import re
 import urllib.parse
 import requests
 
 
 def get_latest_keyword_post(keyword):
-    """抓取 Threads 最新关键词贴文"""
+    """抓取 Threads 最新关键词贴文（兼容 Emoji 表情）"""
     encoded_keyword = urllib.parse.quote(keyword)
     url = f"https://www.threads.net/search?q={encoded_keyword}&serp_type=default"
 
@@ -16,16 +17,12 @@ def get_latest_keyword_post(keyword):
         ),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
         "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
-        "Sec-Fetch-Dest": "document",
-        "Sec-Fetch-Mode": "navigate",
-        "Sec-Fetch-Site": "cross-site",
     }
 
     try:
         response = requests.get(url, headers=headers, timeout=10)
         response.raise_for_status()
 
-        # 尝试正则提取嵌入在 HTML 中的 JSON 贴文正文
         scripts = re.findall(
             r'<script type="application/json"[^>]*>(.*?)</script>',
             response.text,
@@ -37,8 +34,16 @@ def get_latest_keyword_post(keyword):
                     r'"text"\s*:\s*"((?:[^"\\]|\\.)*)"', script
                 )
                 for match in matches:
-                    text = match.encode("utf-8").decode("unicode_escape")
-                    text = text.replace("\\n", "\n").replace('\\"', '"').strip()
+                    try:
+                        # 使用 json.loads 安全解析带 Unicode/Emoji 的字符串
+                        text = json.loads(f'"{match}"').strip()
+                    except Exception:
+                        text = (
+                            match.encode("utf-8", "ignore")
+                            .decode("utf-8", "ignore")
+                            .strip()
+                        )
+
                     if len(text) > 5 and not text.startswith("http"):
                         content = f"正文: {text}\n链接: {url}"
                         content_hash = hashlib.md5(
