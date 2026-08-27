@@ -51,7 +51,30 @@ def save_all_states(states):
         json.dump(states, f, ensure_ascii=False, indent=2)
 
 
-def send_email(subject, body):
+def send_batch_email(notifications):
+    """将所有新动态打包在一封邮件中发送"""
+    if not notifications:
+        return
+
+    subject = f"🔔 [二手相机监控] 检测到 {len(notifications)} 条新动态！"
+
+    body_items = ""
+    for item in notifications:
+        html_content = item["content"].replace("\n", "<br>")
+        body_items += f"""
+        <div style="background-color: #f8f9fa; border-left: 4px solid #007bff; padding: 12px; margin-bottom: 15px;">
+            <p style="margin: 0 0 5px 0;"><b>平台：</b> {item['platform']} | <b>关键词：</b> <span style="color: #d9534f;">{item['keyword']}</span></p>
+            <div style="font-size: 14px; color: #333; line-height: 1.5;">{html_content}</div>
+        </div>
+        """
+
+    body = f"""
+    <h2>📸 相机二手市场最新动态汇总</h2>
+    <p>本次巡检共搜集到 {len(notifications)} 个最新讨论/出售信息：</p>
+    <hr>
+    {body_items}
+    """
+
     message = MIMEText(body, "html", "utf-8")
     message["From"] = Header(f"多平台相机监控助手 <{SENDER_EMAIL}>", "utf-8")
     message["To"] = Header(RECEIVER_EMAIL, "utf-8")
@@ -62,19 +85,19 @@ def send_email(subject, body):
         server.login(SENDER_EMAIL, SENDER_PASS)
         server.sendmail(SENDER_EMAIL, [RECEIVER_EMAIL], message.as_string())
         server.quit()
-        print(f"✅ 邮件发送成功: {subject}")
+        print(
+            f"✅ 汇总邮件发送成功！包含 {len(notifications)} 条新动态。"
+        )
     except Exception as e:
         print(f"❌ 邮件发送失败: {e}")
 
 
-def check_platform(platform_name, fetch_func, all_states):
-    updated_count = 0
+def check_platform(platform_name, fetch_func, all_states, notifications):
     print(f"\n--- 🌐 开始巡检平台: 【{platform_name}】---")
     for keyword in TARGET_KEYWORDS:
         state_key = f"{platform_name}_{keyword}"
         content, content_hash = fetch_func(keyword)
 
-        # 修改这里：如果没获取到数据，打印提示而非静默跳过
         if not content:
             print(
                 f"  └─ ⚠️ 【{platform_name}】:【{keyword}】未能获取到有效数据（可能被拦截）。"
@@ -86,53 +109,48 @@ def check_platform(platform_name, fetch_func, all_states):
             print(
                 f"  └─ 🔔 【{platform_name}】检测到【{keyword}】有新动态！"
             )
-            subject = f"🔔 [{platform_name}] 出现关键词【{keyword}】的新贴/出售！"
-
-            html_content = content.replace("\n", "<br>")
-            body = f"""
-            <h3>[{platform_name}] 监控到相机最新讨论/出售：</h3>
-            <p><b>关键词：</b> {keyword}</p>
-            <p><b>来源平台：</b> {platform_name}</p>
-            <hr>
-            <h4>帖文/商品摘要：</h4>
-            <div style="background-color: #f5f5f5; padding: 15px; border-radius: 8px; font-size: 14px; line-height: 1.6;">
-                {html_content}
-            </div>
-            """
-            send_email(subject, body)
+            notifications.append(
+                {
+                    "platform": platform_name,
+                    "keyword": keyword,
+                    "content": content,
+                }
+            )
             all_states[state_key] = {"hash": content_hash, "content": content}
-            updated_count += 1
         else:
             print(f"  └─ ✅ 【{platform_name}】:【{keyword}】无变化。")
-    return updated_count
 
 
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else "--all"
     all_states = load_all_states()
-    total_updates = 0
+    notifications = []
 
     # 5分钟高频组：DCView、PTT
     if mode in ["--fast", "--all"]:
-        total_updates += check_platform(
-            "DCView", get_latest_dcview_post, all_states
+        check_platform(
+            "DCView", get_latest_dcview_post, all_states, notifications
         )
-        total_updates += check_platform(
-            "PTT_DC_SALE", get_latest_ptt_post, all_states
+        check_platform(
+            "PTT_DC_SALE", get_latest_ptt_post, all_states, notifications
         )
 
     # 15分钟常规组：Threads、Yahoo
     if mode in ["--threads", "--slow", "--all"]:
-        total_updates += check_platform(
-            "Threads", get_threads_post, all_states
+        check_platform(
+            "Threads", get_threads_post, all_states, notifications
         )
-        total_updates += check_platform(
-            "Yahoo", get_latest_yahoo_post, all_states
+        check_platform(
+            "Yahoo", get_latest_yahoo_post, all_states, notifications
         )
+
+    # 发送汇总邮件
+    if notifications:
+        send_batch_email(notifications)
 
     save_all_states(all_states)
     print(
-        f"\n🎉 巡检完毕，本次共发送 {total_updates} 封新通知邮件。"
+        f"\n🎉 巡检完毕，本次共收集到 {len(notifications)} 条新动态。"
     )
 
 
