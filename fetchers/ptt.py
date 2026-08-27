@@ -26,7 +26,6 @@ def get_latest_ptt_post(keyword):
         if not rents:
             return None, None
 
-        # 从后往前找最新未被删除的贴文
         for rent in reversed(rents):
             title_div = rent.find("div", class_="title")
             if title_div and title_div.find("a"):
