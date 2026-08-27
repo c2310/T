@@ -5,7 +5,7 @@ from bs4 import BeautifulSoup
 
 
 def get_latest_yahoo_post(keyword):
-    """抓取 Yahoo拍卖 最新出售商品"""
+    """抓取 Yahoo 最新出售商品"""
     encoded_kw = urllib.parse.quote(keyword)
     # 按最新上架倒序排列
     url = f"https://tw.bid.yahoo.com/search/auction/product?p={encoded_kw}&sort=-etime"
@@ -39,5 +39,5 @@ def get_latest_yahoo_post(keyword):
 
         return None, None
     except Exception as e:
-        print(f"[Yahoo拍卖 抓取异常] 关键词 '{keyword}': {e}")
+        print(f"[Yahoo 抓取异常] 关键词 '{keyword}': {e}")
         return None, None
