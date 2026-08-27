@@ -1,21 +1,33 @@
-import json
 import os
+import json
 import smtplib
-from email.header import Header
+import urllib.parse
 from email.mime.text import MIMEText
+from email.header import Header
 
-# 导入新的关键词抓取函数
+# 导入 Threads 关键词抓取函数
 from fetchers.threads import get_latest_keyword_post
 
 # ================= 配置区域 =================
-# 1. 填入你想监控的关键词（例如 "ChatGPT"、"股票" 或 "二手手机"）
-TARGET_KEYWORD = "Python"
+# 你想监控的多个相机关键词列表
+TARGET_KEYWORDS = [
+    "Canon G12",
+    "Canon G15",
+    "Canon G16",
+    "Canon G11",
+    "Canon G10",
+    "Canon S95",
+    "Canon Sx70hs",
+    "Canon G",
+    "Sony Rx10iv",
+    "Sony RX10m4"
+]
 
-# 2. 保存历史记录的文件名（建议加上关键词区分）
-HISTORY_FILE = f"threads_kw_{TARGET_KEYWORD}_state.json"
+# 保存所有关键词历史记录的文件（保持名称不变，无需修改 GitHub Actions 配置文件）
+HISTORY_FILE = "threads_state.json"
 
-# 3. 邮箱配置
-SMTP_SERVER = "smtp.qq.com"  # 若用 163 修改为 smtp.163.com
+# 邮箱配置
+SMTP_SERVER = "smtp.qq.com"  # 若用 163 改为 smtp.163.com
 SMTP_PORT = 465
 
 SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "你的发件邮箱@qq.com")
@@ -24,30 +36,27 @@ RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL", SENDER_EMAIL)
 
 
 # ================= 辅助函数 =================
-def has_changed(new_hash):
+def load_all_states():
+    """读取所有关键词的历史记录字典"""
     if not os.path.exists(HISTORY_FILE):
-        return True
+        return {}
     try:
         with open(HISTORY_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return data.get("hash") != new_hash
+            return json.load(f)
     except Exception:
-        return True
+        return {}
 
 
-def save_state(content, content_hash):
+def save_all_states(states):
+    """保存所有关键词的状态字典"""
     with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(
-            {"hash": content_hash, "content": content},
-            f,
-            ensure_ascii=False,
-            indent=2,
-        )
+        json.dump(states, f, ensure_ascii=False, indent=2)
 
 
 def send_email(subject, body):
+    """发送 HTML 邮件通知"""
     message = MIMEText(body, "html", "utf-8")
-    message["From"] = Header(f"Threads 关键词监控助手 <{SENDER_EMAIL}>", "utf-8")
+    message["From"] = Header(f"相机监控助手 <{SENDER_EMAIL}>", "utf-8")
     message["To"] = Header(RECEIVER_EMAIL, "utf-8")
     message["Subject"] = Header(subject, "utf-8")
 
@@ -56,42 +65,63 @@ def send_email(subject, body):
         server.login(SENDER_EMAIL, SENDER_PASS)
         server.sendmail(SENDER_EMAIL, [RECEIVER_EMAIL], message.as_string())
         server.quit()
-        print("✅ 邮件发送成功！")
+        print(f"✅ 邮件发送成功: {subject}")
     except Exception as e:
         print(f"❌ 邮件发送失败: {e}")
 
 
 # ================= 主流程 =================
 def main():
-    print(f"🔍 开始检查 Threads 关于关键词【{TARGET_KEYWORD}】的最新更新...")
+    print(f"🔍 开始检查 {len(TARGET_KEYWORDS)} 个相机关键词的 Threads 更新...\n")
+    
+    all_states = load_all_states()
+    updated_count = 0
 
-    content, content_hash = get_latest_keyword_post(TARGET_KEYWORD)
+    for keyword in TARGET_KEYWORDS:
+        print(f"正在检查关键词:【{keyword}】...")
+        content, content_hash = get_latest_keyword_post(keyword)
+        
+        if not content:
+            print(f"  └─ ⚠️ 未能获取到【{keyword}】的相关帖文，跳过。")
+            continue
 
-    if not content:
-        print("⚠️ 未能获取到相关的搜索内容。")
-        return
+        # 获取该关键词上一次记录的哈希值
+        last_hash = all_states.get(keyword, {}).get("hash")
 
-    if has_changed(content_hash):
-        print("🔔 检测到关键词有新帖文！正在发送邮件通知...")
-        subject = f"🔔 Threads 出现关于【{TARGET_KEYWORD}】的新帖文！"
+        if content_hash != last_hash:
+            print(f"  └─ 🔔 检测到【{keyword}】有新帖文！正在发送邮件...")
+            
+            subject = f"🔔 Threads 出现相机关键词【{keyword}】的新帖文！"
+            html_content = content.replace("\n", "<br>")
+            
+            # 拼接正确的搜索 URL
+            encoded_kw = urllib.parse.quote(keyword)
+            search_link = f"https://www.threads.net/search?q={encoded_kw}"
 
-        html_content = content.replace("\n", "<br>")
-        search_link = f"https://www.threads.net/search?q={TARGET_KEYWORD}"
+            body = f"""
+            <h3>监控到相机关键词最新讨论：</h3>
+            <p><b>关键词：</b> {keyword}</p>
+            <p><b>搜索结果链接：</b> <a href="{search_link}">{search_link}</a></p>
+            <hr>
+            <h4>最新帖文摘要：</h4>
+            <div style="background-color: #f5f5f5; padding: 15px; border-radius: 8px; font-size: 14px; line-height: 1.6;">
+                {html_content}
+            </div>
+            """
+            send_email(subject, body)
+            
+            # 更新该关键词的状态
+            all_states[keyword] = {
+                "hash": content_hash,
+                "content": content
+            }
+            updated_count += 1
+        else:
+            print(f"  └─ ✅【{keyword}】内容无变化。")
 
-        body = f"""
-        <h3>监控到关键词最新讨论：</h3>
-        <p><b>关键词：</b> {TARGET_KEYWORD}</p>
-        <p><b>搜索结果链接：</b> <a href="{search_link}">{search_link}</a></p>
-        <hr>
-        <h4>最新帖文摘要：</h4>
-        <div style="background-color: #f5f5f5; padding: 15px; border-radius: 8px; font-size: 14px; line-height: 1.6;">
-            {html_content}
-        </div>
-        """
-        send_email(subject, body)
-        save_state(content, content_hash)
-    else:
-        print("✅ 内容无变化，无需通知。")
+    # 统一保存更新后的所有状态
+    save_all_states(all_states)
+    print(f"\n🎉 所有关键词巡检完毕，本次共有 {updated_count} 个关键词触发更新通知。")
 
 
 if __name__ == "__main__":
