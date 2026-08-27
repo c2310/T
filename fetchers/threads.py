@@ -2,17 +2,12 @@ import hashlib
 import json
 import re
 import urllib.parse
+from concurrent.futures import ThreadPoolExecutor
 import requests
-from bs4 import BeautifulSoup
 
 
-def get_latest_keyword_post(keyword):
-    """抓取 Threads 指定关键词搜索结果中的最新贴文正文与 MD5 哈希值
-
-    :param keyword: 搜索关键词（如 '人工智能' 或 'Python'）
-    :return: (post_text, post_hash)
-    """
-    # 对关键词进行 URL 编码（处理中文或空格）
+def _fetch_single_keyword(keyword):
+    """单条关键词抓取逻辑（缩短超时时间至 8 秒）"""
     encoded_keyword = urllib.parse.quote(keyword)
     url = f"https://www.threads.net/search?q={encoded_keyword}&serp_type=default"
 
@@ -25,37 +20,42 @@ def get_latest_keyword_post(keyword):
     }
 
     try:
-        response = requests.get(url, headers=headers, timeout=15)
+        response = requests.get(url, headers=headers, timeout=8)
         response.raise_for_status()
 
-        # 从搜索页面的 JSON 数据流中提取贴文正文
         post_text = _extract_from_embedded_json(response.text)
-
         if not post_text:
-            print(f"[警告] 未能找到关于关键词 '{keyword}' 的相关帖文。")
-            return None, None
+            return keyword, None, None
 
         post_hash = hashlib.md5(post_text.encode("utf-8")).hexdigest()
-        return post_text, post_hash
-
+        return keyword, post_text, post_hash
     except Exception as e:
-        print(f"[Threads 关键词抓取异常] 关键词 '{keyword}': {e}")
-        return None, None
+        print(f"[Threads 抓取超时/异常] 关键词 '{keyword}': {e}")
+        return keyword, None, None
+
+
+def get_latest_keyword_post(keyword):
+    """保持向后兼容的单条抓取入口"""
+    _, text, post_hash = _fetch_single_keyword(keyword)
+    return text, post_hash
 
 
 def _extract_from_embedded_json(html):
     """从页面 JSON 数据中提取贴文正文"""
     try:
         scripts = re.findall(
-            r'<script type="application/json"[^>]*>(.*?)</script>', html, re.DOTALL
+            r'<script type="application/json"[^>]*>(.*?)</script>',
+            html,
+            re.DOTALL,
         )
         for script in scripts:
             if '"text"' in script:
-                matches = re.findall(r'"text"\s*:\s*"((?:[^"\\]|\\.)*)"', script)
+                matches = re.findall(
+                    r'"text"\s*:\s*"((?:[^"\\]|\\.)*)"', script
+                )
                 for match in matches:
                     text = match.encode("utf-8").decode("unicode_escape")
                     text = text.replace("\\n", "\n").replace('\\"', '"').strip()
-                    # 过滤掉短词或 URL，提取有效帖文内容
                     if len(text) > 5 and not text.startswith("http"):
                         return text
     except Exception:
