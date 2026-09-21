@@ -1,16 +1,14 @@
 import json
 import os
-import smtplib
 import sys
-from email.header import Header
-from email.mime.text import MIMEText
+import requests
 
 from fetchers.dcview import get_latest_dcview_post
 from fetchers.ptt import get_latest_ptt_post
 from fetchers.threads import get_latest_keyword_post as get_threads_post
 from fetchers.yahoo import get_latest_yahoo_post
 
-# ================= 全局关键词配置 =================
+# 全局关键词配置
 TARGET_KEYWORDS = [
     "Canon G12",
     "Canon G15",
@@ -28,12 +26,8 @@ TARGET_KEYWORDS = [
 
 HISTORY_FILE = "threads_state.json"
 
-SMTP_SERVER = "smtp.qq.com"  # 163邮箱修改为 smtp.163.com
-SMTP_PORT = 465
-
-SENDER_EMAIL = os.environ.get("SENDER_EMAIL", "你的发件邮箱@qq.com")
-SENDER_PASS = os.environ.get("SENDER_PASS", "你的邮箱授权码")
-RECEIVER_EMAIL = os.environ.get("RECEIVER_EMAIL", SENDER_EMAIL)
+# 从 GitHub Secrets / 环境变量中读取 Discord Webhook URL
+DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 
 
 def load_all_states():
@@ -51,64 +45,61 @@ def save_all_states(states):
         json.dump(states, f, ensure_ascii=False, indent=2)
 
 
-def send_batch_email(notifications):
-    """将所有新动态打包在一封邮件中发送"""
+def send_discord_notify(notifications):
     if not notifications:
         return
 
-    subject = f"🔔 [二手相机监控] 检测到 {len(notifications)} 条新动态！"
+    if not DISCORD_WEBHOOK_URL:
+        print("❌ 错误：未配置 DISCORD_WEBHOOK_URL 环境变量！")
+        return
 
-    body_items = ""
+    # 组装 Discord 富文本 Embed 卡片
+    embeds = []
     for item in notifications:
-        html_content = item["content"].replace("\n", "<br>")
-        body_items += f"""
-        <div style="background-color: #f8f9fa; border-left: 4px solid #007bff; padding: 12px; margin-bottom: 15px;">
-            <p style="margin: 0 0 5px 0;"><b>平台：</b> {item['platform']} | <b>关键词：</b> <span style="color: #d9534f;">{item['keyword']}</span></p>
-            <div style="font-size: 14px; color: #333; line-height: 1.5;">{html_content}</div>
-        </div>
-        """
-
-    body = f"""
-    <h2>📸 相机二手市场最新动态汇总</h2>
-    <p>本次巡检共搜集到 {len(notifications)} 个最新讨论/出售信息：</p>
-    <hr>
-    {body_items}
-    """
-
-    message = MIMEText(body, "html", "utf-8")
-    message["From"] = Header(f"多平台相机监控助手 <{SENDER_EMAIL}>", "utf-8")
-    message["To"] = Header(RECEIVER_EMAIL, "utf-8")
-    message["Subject"] = Header(subject, "utf-8")
-
-    try:
-        server = smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT)
-        server.login(SENDER_EMAIL, SENDER_PASS)
-        server.sendmail(SENDER_EMAIL, [RECEIVER_EMAIL], message.as_string())
-        server.quit()
-        print(
-            f"✅ 汇总邮件发送成功！包含 {len(notifications)} 条新动态。"
+        # 截取内容前 500 个字符防止超出 Discord 长度限制
+        clean_content = item["content"][:500]
+        embeds.append(
+            {
+                "title": f"🔔 [{item['platform']}] 检测到新动态：{item['keyword']}",
+                "description": clean_content,
+                "color": 3447003,  # 蓝色边框 (Dec 3447003 = Hex #3498DB)
+                "footer": {"text": "多平台二手相机监控助手"},
+            }
         )
-    except Exception as e:
-        print(f"❌ 邮件发送失败: {e}")
+
+    # Discord 限制单条 Payload 最多包含 10 个 Embed 卡片，超出时分批发送
+    chunk_size = 10
+    for i in range(0, len(embeds), chunk_size):
+        chunk = embeds[i : i + chunk_size]
+        payload = {
+            "username": "二手相机监控助手",
+            "avatar_url": "https://cdn-icons-png.flaticon.com/512/2950/2950687.png",
+            "embeds": chunk,
+        }
+
+        try:
+            resp = requests.post(DISCORD_WEBHOOK_URL, json=payload, timeout=10)
+            if resp.status_code in [200, 204]:
+                print(f"  ✅ Discord 推送成功！已发送 {len(chunk)} 条动态。")
+            else:
+                print(f"❌ Discord 推送失败，状态码: {resp.status_code}, 返回信息: {resp.text}")
+        except Exception as e:
+            print(f"❌ Discord 请求发送异常: {e}")
 
 
 def check_platform(platform_name, fetch_func, all_states, notifications):
-    print(f"\n--- 🌐 开始巡检平台: 【{platform_name}】---")
+    print(f"\n--- 🌐 开始巡检平台：【{platform_name}】 ---")
     for keyword in TARGET_KEYWORDS:
         state_key = f"{platform_name}_{keyword}"
         content, content_hash = fetch_func(keyword)
 
         if not content:
-            print(
-                f"  └─ ⚠️ 【{platform_name}】:【{keyword}】未能获取到有效数据（可能被拦截）。"
-            )
+            print(f"  ⚠️ 【{platform_name}】：【{keyword}】 未能获取到有效数据（可能被拦截）。")
             continue
 
         last_hash = all_states.get(state_key, {}).get("hash")
         if content_hash != last_hash:
-            print(
-                f"  └─ 🔔 【{platform_name}】检测到【{keyword}】有新动态！"
-            )
+            print(f"  🔔 【{platform_name}】检测到 【{keyword}】 有新动态！")
             notifications.append(
                 {
                     "platform": platform_name,
@@ -116,9 +107,9 @@ def check_platform(platform_name, fetch_func, all_states, notifications):
                     "content": content,
                 }
             )
-            all_states[state_key] = {"hash": content_hash, "content": content}
+            all_states[state_key] = {"hash": content_hash}
         else:
-            print(f"  └─ ✅ 【{platform_name}】:【{keyword}】无变化。")
+            print(f"  └─  【{platform_name}】：【{keyword}】 无变化。")
 
 
 def main():
@@ -126,32 +117,19 @@ def main():
     all_states = load_all_states()
     notifications = []
 
-    # 5分钟高频组：DCView、PTT
     if mode in ["--fast", "--all"]:
-        check_platform(
-            "DCView", get_latest_dcview_post, all_states, notifications
-        )
-        check_platform(
-            "PTT_DC_SALE", get_latest_ptt_post, all_states, notifications
-        )
+        check_platform("DCView", get_latest_dcview_post, all_states, notifications)
+        check_platform("PTT_DC_SALE", get_latest_ptt_post, all_states, notifications)
 
-    # 15分钟常规组：Threads、Yahoo
     if mode in ["--threads", "--slow", "--all"]:
-        check_platform(
-            "Threads", get_threads_post, all_states, notifications
-        )
-        check_platform(
-            "Yahoo", get_latest_yahoo_post, all_states, notifications
-        )
+        check_platform("Threads", get_threads_post, all_states, notifications)
+        check_platform("Yahoo", get_latest_yahoo_post, all_states, notifications)
 
-    # 发送汇总邮件
     if notifications:
-        send_batch_email(notifications)
+        send_discord_notify(notifications)
 
     save_all_states(all_states)
-    print(
-        f"\n🎉 巡检完毕，本次共收集到 {len(notifications)} 条新动态。"
-    )
+    print(f"\n🎉 巡检完毕，本次共收集到 {len(notifications)} 条新动态。")
 
 
 if __name__ == "__main__":
