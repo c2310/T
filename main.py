@@ -109,11 +109,25 @@ def check_platform(platform_name, fetch_func, all_states, notifications):
             )
             all_states[state_key] = {"hash": content_hash}
         else:
-            print(f"  └─  【{platform_name}】：【{keyword}】 无变化。")
+            print(f"  └─ 【{platform_name}】：【{keyword}】 无变化。")
 
 
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else "--all"
+
+    # ================= 临时强制推送：测试 Discord 连通性 =================
+    print("\n🧪 [测试模式] 正在向 Discord 发送连通性测试卡片...")
+    test_notification = [
+        {
+            "platform": "系统测试",
+            "keyword": "Discord 连通性测试",
+            "content": "🎉 恭喜！GitHub Actions 云端与 Discord Webhook 通信完全正常！\n（收到此条消息说明 Webhook 环境变量及网络正常）",
+        }
+    ]
+    send_discord_notify(test_notification)
+    print("-----------------------------------------------------------\n")
+    # ======================================================================
+
     all_states = load_all_states()
     notifications = []
 
