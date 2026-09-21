@@ -1,6 +1,6 @@
 import hashlib
-import requests
 from bs4 import BeautifulSoup
+import requests
 
 
 def get_latest_ptt_post(keyword):
@@ -9,12 +9,16 @@ def get_latest_ptt_post(keyword):
     cookies = {"over18": "1"}
     headers = {
         "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        )
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        ),
+        "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
     }
 
     try:
-        res = requests.get(url, headers=headers, cookies=cookies, timeout=10)
+        res = requests.get(
+            url, headers=headers, cookies=cookies, timeout=10
+        )
         if res.status_code == 200:
             soup = BeautifulSoup(res.text, "html.parser")
             title_divs = soup.find_all("div", class_="title")
