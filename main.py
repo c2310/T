@@ -62,7 +62,7 @@ def send_discord_notify(notifications):
             {
                 "title": f"🔔 [{item['platform']}] 检测到新动态：{item['keyword']}",
                 "description": clean_content,
-                "color": 3447003,  # 蓝色边框 (Dec 3447003 = Hex #3498DB)
+                "color": 3447003,  # 蓝色边框 (#3498DB)
                 "footer": {"text": "多平台二手相机监控助手"},
             }
         )
@@ -82,7 +82,9 @@ def send_discord_notify(notifications):
             if resp.status_code in [200, 204]:
                 print(f"  ✅ Discord 推送成功！已发送 {len(chunk)} 条动态。")
             else:
-                print(f"❌ Discord 推送失败，状态码: {resp.status_code}, 返回信息: {resp.text}")
+                print(
+                    f"❌ Discord 推送失败，状态码: {resp.status_code}, 返回信息: {resp.text}"
+                )
         except Exception as e:
             print(f"❌ Discord 请求发送异常: {e}")
 
@@ -94,7 +96,9 @@ def check_platform(platform_name, fetch_func, all_states, notifications):
         content, content_hash = fetch_func(keyword)
 
         if not content:
-            print(f"  ⚠️ 【{platform_name}】：【{keyword}】 未能获取到有效数据（可能被拦截）。")
+            print(
+                f"  ⚠️ 【{platform_name}】：【{keyword}】 未能获取到有效数据（可能被拦截）。"
+            )
             continue
 
         last_hash = all_states.get(state_key, {}).get("hash")
@@ -114,30 +118,22 @@ def check_platform(platform_name, fetch_func, all_states, notifications):
 
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else "--all"
-
-    # ================= 临时强制推送：测试 Discord 连通性 =================
-    print("\n🧪 [测试模式] 正在向 Discord 发送连通性测试卡片...")
-    test_notification = [
-        {
-            "platform": "系统测试",
-            "keyword": "Discord 连通性测试",
-            "content": "🎉 恭喜！GitHub Actions 云端与 Discord Webhook 通信完全正常！\n（收到此条消息说明 Webhook 环境变量及网络正常）",
-        }
-    ]
-    send_discord_notify(test_notification)
-    print("-----------------------------------------------------------\n")
-    # ======================================================================
-
     all_states = load_all_states()
     notifications = []
 
     if mode in ["--fast", "--all"]:
-        check_platform("DCView", get_latest_dcview_post, all_states, notifications)
-        check_platform("PTT_DC_SALE", get_latest_ptt_post, all_states, notifications)
+        check_platform(
+            "DCView", get_latest_dcview_post, all_states, notifications
+        )
+        check_platform(
+            "PTT_DC_SALE", get_latest_ptt_post, all_states, notifications
+        )
 
     if mode in ["--threads", "--slow", "--all"]:
         check_platform("Threads", get_threads_post, all_states, notifications)
-        check_platform("Yahoo", get_latest_yahoo_post, all_states, notifications)
+        check_platform(
+            "Yahoo", get_latest_yahoo_post, all_states, notifications
+        )
 
     if notifications:
         send_discord_notify(notifications)
