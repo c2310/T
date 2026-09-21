@@ -21,8 +21,7 @@ jobs:
           pip install -r requirements.txt
       - name: Run Threads Scraper
         env:
-          SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-          SENDER_PASS: ${{ secrets.SENDER_PASS }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
         run: python main.py --threads
       - name: Auto Save State
         run: |
