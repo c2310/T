@@ -7,13 +7,16 @@ import requests
 
 
 def get_latest_keyword_post(keyword):
-    """抓取 Threads 最新关键词贴文（支持 ScraperAPI 代理）"""
+    """抓取 Threads 最新关键词贴文（优化版：关闭 render 以大幅提速并节省 API 额度）"""
     encoded_keyword = urllib.parse.quote(keyword)
-    target_url = f"https://www.threads.net/search?q={encoded_keyword}&serp_type=default"
+    target_url = (
+        f"https://www.threads.net/search?q={encoded_keyword}&serp_type=default"
+    )
 
     api_key = os.environ.get("SCRAPER_API_KEY")
     if api_key:
-        req_url = f"http://api.scraperapi.com?api_key={api_key}&url={urllib.parse.quote(target_url)}&render=true"
+        # 已移除 &render=true，避免无头浏览器渲染，大幅缩减执行时间与 API 额度消耗
+        req_url = f"http://api.scraperapi.com?api_key={api_key}&url={urllib.parse.quote(target_url)}"
     else:
         req_url = target_url
 
@@ -28,7 +31,7 @@ def get_latest_keyword_post(keyword):
     }
 
     try:
-        response = requests.get(req_url, headers=headers, timeout=25)
+        response = requests.get(req_url, headers=headers, timeout=15)
         if response.status_code != 200:
             return None, None
 
@@ -39,7 +42,9 @@ def get_latest_keyword_post(keyword):
         )
         for script in scripts:
             if '"text"' in script:
-                matches = re.findall(r'"text"\s*:\s*"((?:[^"\\]|\\.)*)"', script)
+                matches = re.findall(
+                    r'"text"\s*:\s*"((?:[^"\\]|\\.)*)"', script
+                )
                 for match in matches:
                     try:
                         text = json.loads(f'"{match}"').strip()
@@ -52,7 +57,9 @@ def get_latest_keyword_post(keyword):
 
                     if len(text) > 5 and not text.startswith("http"):
                         content = f"正文: {text}\n链接: {target_url}"
-                        content_hash = hashlib.md5(content.encode("utf-8")).hexdigest()
+                        content_hash = hashlib.md5(
+                            content.encode("utf-8")
+                        ).hexdigest()
                         return content, content_hash
 
         return None, None
