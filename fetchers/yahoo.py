@@ -1,7 +1,16 @@
 import hashlib
 import urllib.parse
-import requests
 from bs4 import BeautifulSoup
+import requests
+
+# 方式2：在文件顶部定义标准浏览器请求头
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+    ),
+    "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+}
 
 
 def get_latest_yahoo_post(keyword):
@@ -9,14 +18,9 @@ def get_latest_yahoo_post(keyword):
     encoded_kw = urllib.parse.quote(keyword)
     url = f"https://tw.bid.yahoo.com/search/auction/product?p={encoded_kw}&sort=-curprice"
 
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-        )
-    }
-
     try:
-        res = requests.get(url, headers=headers, timeout=10)
+        # 使用顶部定义的 HEADERS
+        res = requests.get(url, headers=HEADERS, timeout=10)
         if res.status_code == 200:
             soup = BeautifulSoup(res.text, "html.parser")
             # 匹配拍卖商品卡片
