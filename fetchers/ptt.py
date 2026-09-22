@@ -10,6 +10,7 @@ HEADERS = {
         "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     ),
     "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Cookie": "over18=1",  # 显式放在 Header 中，确保 ScraperAPI 带上 over18 验证
 }
 
 
@@ -19,7 +20,7 @@ def get_latest_ptt_post(keyword):
 
     api_key = os.environ.get("SCRAPER_API_KEY")
     if api_key:
-        # PTT 需要通过 cookies 绕过 18 岁提示，代理时可以通过请求参数传递
+        # 使用 keep_headers=true 确保 Cookie 被透传给 PTT
         req_url = f"http://api.scraperapi.com?api_key={api_key}&url={urllib.parse.quote(target_url)}&keep_headers=true"
     else:
         req_url = target_url
@@ -27,7 +28,8 @@ def get_latest_ptt_post(keyword):
     cookies = {"over18": "1"}
 
     try:
-        res = requests.get(req_url, headers=HEADERS, cookies=cookies, timeout=20)
+        # 将 timeout 压低至 7 秒，避免卡死工作流
+        res = requests.get(req_url, headers=HEADERS, cookies=cookies, timeout=7)
         if res.status_code == 200:
             soup = BeautifulSoup(res.text, "html.parser")
             title_divs = soup.find_all("div", class_="title")
