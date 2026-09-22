@@ -6,16 +6,20 @@ import urllib.parse
 import requests
 
 
+def is_chinese_text(text):
+    """判断文本中是否包含中文（繁体或简体）"""
+    # 匹配 CJK 统一表意文字范围
+    return bool(re.search(r"[\u4e00-\u9fa5]", text))
+
+
 def get_latest_keyword_post(keyword):
-    """抓取 Threads 最新关键词贴文（优化版：关闭 render 以大幅提速并节省 API 额度）"""
+    """抓取 Threads 最新关键词贴文（只过滤中文字符，并生成直接跳转的贴文链接）"""
     encoded_keyword = urllib.parse.quote(keyword)
-    target_url = (
-        f"https://www.threads.net/search?q={encoded_keyword}&serp_type=default"
-    )
+    # 1. 在 URL 中加入 &hl=zh-tw 参数，指示 Threads 优先返回中文结果
+    target_url = f"https://www.threads.net/search?q={encoded_keyword}&serp_type=default&hl=zh-tw"
 
     api_key = os.environ.get("SCRAPER_API_KEY")
     if api_key:
-        # 已移除 &render=true，避免无头浏览器渲染，大幅缩减执行时间与 API 额度消耗
         req_url = f"http://api.scraperapi.com?api_key={api_key}&url={urllib.parse.quote(target_url)}"
     else:
         req_url = target_url
@@ -26,7 +30,7 @@ def get_latest_keyword_post(keyword):
             "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
         ),
         "Accept": "*/*",
-        "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+        "Accept-Language": "zh-TW,zh;q=0.9,zh-CN;q=0.8,en-US;q=0.7",
         "X-IG-App-ID": "238260118697367",
     }
 
@@ -34,6 +38,16 @@ def get_latest_keyword_post(keyword):
         response = requests.get(req_url, headers=headers, timeout=15)
         if response.status_code != 200:
             return None, None
+
+        # 尝试从页面全局数据中寻找具体的贴文 Shortcode / Post ID
+        # Threads 贴文 URL 结构通常为 https://www.threads.net/@/post/{code}
+        post_code_match = re.search(r'"code"\s*:\s*"([A-Za-z0-9_-]{10,12})"', response.text)
+        if post_code_match:
+            post_shortcode = post_code_match.group(1)
+            direct_post_url = f"https://www.threads.net/@/post/{post_shortcode}"
+        else:
+            # 兜底：如果没有解析出单条贴文 ID，则使用该关键词的搜索链接
+            direct_post_url = target_url
 
         scripts = re.findall(
             r'<script type="application/json"[^>]*>(.*?)</script>',
@@ -55,8 +69,11 @@ def get_latest_keyword_post(keyword):
                             .strip()
                         )
 
-                    if len(text) > 5 and not text.startswith("http"):
-                        content = f"正文: {text}\n链接: {target_url}"
+                    # 过滤条件：
+                    # 1. 长度大于 5 且不是 http 链接
+                    # 2. 【新增】必须包含繁体/简体中文字符（排除日、韩、英等外文贴文）
+                    if len(text) > 5 and not text.startswith("http") and is_chinese_text(text):
+                        content = f"正文: {text}\n贴文链接: {direct_post_url}"
                         content_hash = hashlib.md5(
                             content.encode("utf-8")
                         ).hexdigest()
