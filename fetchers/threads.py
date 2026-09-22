@@ -15,12 +15,12 @@ def is_chinese_text(text):
 def get_latest_keyword_post(keyword):
     """抓取 Threads 最新关键词贴文（只过滤中文字符，并生成直接跳转的贴文链接）"""
     encoded_keyword = urllib.parse.quote(keyword)
-    # 1. 在 URL 中加入 &hl=zh-tw 参数，指示 Threads 优先返回中文结果
     target_url = f"https://www.threads.net/search?q={encoded_keyword}&serp_type=default&hl=zh-tw"
 
     api_key = os.environ.get("SCRAPER_API_KEY")
     if api_key:
-        req_url = f"http://api.scraperapi.com?api_key={api_key}&url={urllib.parse.quote(target_url)}"
+        # 加入 keep_headers=true，避免 ScraperAPI 后台做无意义的长重试
+        req_url = f"http://api.scraperapi.com?api_key={api_key}&url={urllib.parse.quote(target_url)}&keep_headers=true"
     else:
         req_url = target_url
 
@@ -35,18 +35,17 @@ def get_latest_keyword_post(keyword):
     }
 
     try:
-        response = requests.get(req_url, headers=headers, timeout=15)
+        # 将 timeout 压低至 6 秒，快速响应与释放并发线程
+        response = requests.get(req_url, headers=headers, timeout=6)
         if response.status_code != 200:
             return None, None
 
         # 尝试从页面全局数据中寻找具体的贴文 Shortcode / Post ID
-        # Threads 贴文 URL 结构通常为 https://www.threads.net/@/post/{code}
         post_code_match = re.search(r'"code"\s*:\s*"([A-Za-z0-9_-]{10,12})"', response.text)
         if post_code_match:
             post_shortcode = post_code_match.group(1)
             direct_post_url = f"https://www.threads.net/@/post/{post_shortcode}"
         else:
-            # 兜底：如果没有解析出单条贴文 ID，则使用该关键词的搜索链接
             direct_post_url = target_url
 
         scripts = re.findall(
@@ -71,7 +70,7 @@ def get_latest_keyword_post(keyword):
 
                     # 过滤条件：
                     # 1. 长度大于 5 且不是 http 链接
-                    # 2. 【新增】必须包含繁体/简体中文字符（排除日、韩、英等外文贴文）
+                    # 2. 必须包含繁体/简体中文字符（排除日、韩、英等外文贴文）
                     if len(text) > 5 and not text.startswith("http") and is_chinese_text(text):
                         content = f"正文: {text}\n贴文链接: {direct_post_url}"
                         content_hash = hashlib.md5(
