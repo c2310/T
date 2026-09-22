@@ -25,14 +25,16 @@ def get_latest_dcview_post(keyword):
         req_url = target_url
 
     try:
-        res = requests.get(req_url, headers=HEADERS, timeout=20)
+        # 将 timeout 压缩至 7 秒，避免因个别代理请求拖慢整个线程池
+        res = requests.get(req_url, headers=HEADERS, timeout=7)
         if res.status_code == 200:
             soup = BeautifulSoup(res.text, "html.parser")
             items = soup.find_all("a", href=lambda h: h and "/post/" in h)
 
             for item in items:
                 title = item.get_text(strip=True)
-                if len(title) > 3 and "买" not in title and "征" not in title:
+                # 过滤征求贴（买、徵、徵求、收），仅保留卖帖
+                if len(title) > 3 and not any(k in title for k in ["买", "徵", "征", "收"]):
                     href = item["href"]
                     if not href.startswith("http"):
                         href = "https://market.dcview.com" + href
