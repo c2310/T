@@ -2,6 +2,7 @@ import json
 import os
 import sys
 import requests
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fetchers.dcview import get_latest_dcview_post
 from fetchers.ptt import get_latest_ptt_post
@@ -56,7 +57,6 @@ def send_discord_notify(notifications):
     # 组装 Discord 富文本 Embed 卡片
     embeds = []
     for item in notifications:
-        # 截取内容前 500 个字符防止超出 Discord 长度限制
         clean_content = item["content"][:500]
         embeds.append(
             {
@@ -89,31 +89,49 @@ def send_discord_notify(notifications):
             print(f"❌ Discord 请求发送异常: {e}")
 
 
+def worker_fetch(platform_name, fetch_func, keyword):
+    """单任务 Worker，用于在线程池中并行执行"""
+    try:
+        content, content_hash = fetch_func(keyword)
+        return keyword, content, content_hash
+    except Exception as e:
+        print(f"  ❌ 【{platform_name}】：【{keyword}】 抓取异常: {e}")
+        return keyword, None, None
+
+
 def check_platform(platform_name, fetch_func, all_states, notifications):
     print(f"\n--- 🌐 开始巡检平台：【{platform_name}】 ---")
-    for keyword in TARGET_KEYWORDS:
-        state_key = f"{platform_name}_{keyword}"
-        content, content_hash = fetch_func(keyword)
+    
+    # 使用线程池加速，设置 max_workers=5 避免并发过高触发 ScraperAPI 的 429
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        futures = {
+            executor.submit(worker_fetch, platform_name, fetch_func, kw): kw
+            for kw in TARGET_KEYWORDS
+        }
 
-        if not content:
-            print(
-                f"  ⚠️ 【{platform_name}】：【{keyword}】 未能获取到有效数据（可能被拦截）。"
-            )
-            continue
+        for future in as_completed(futures):
+            keyword, content, content_hash = future.result()
+            state_key = f"{platform_name}_{keyword}"
 
-        last_hash = all_states.get(state_key, {}).get("hash")
-        if content_hash != last_hash:
-            print(f"  🔔 【{platform_name}】检测到 【{keyword}】 有新动态！")
-            notifications.append(
-                {
-                    "platform": platform_name,
-                    "keyword": keyword,
-                    "content": content,
-                }
-            )
-            all_states[state_key] = {"hash": content_hash}
-        else:
-            print(f"  └─ 【{platform_name}】：【{keyword}】 无变化。")
+            if not content:
+                print(
+                    f"  ⚠️ 【{platform_name}】：【{keyword}】 未能获取到有效数据。"
+                )
+                continue
+
+            last_hash = all_states.get(state_key, {}).get("hash")
+            if content_hash != last_hash:
+                print(f"  🔔 【{platform_name}】检测到 【{keyword}】 有新动态！")
+                notifications.append(
+                    {
+                        "platform": platform_name,
+                        "keyword": keyword,
+                        "content": content,
+                    }
+                )
+                all_states[state_key] = {"hash": content_hash}
+            else:
+                print(f"  └─ 【{platform_name}】：【{keyword}】 无变化。")
 
 
 def main():
