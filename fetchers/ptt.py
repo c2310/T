@@ -34,7 +34,7 @@ def get_latest_ptt_post(keyword):
         cookies = {"over18": "1"}
 
     try:
-        res = requests.get(req_url, headers=req_headers, cookies=cookies, timeout=15)
+        res = requests.get(req_url, headers=req_headers, cookies=cookies, timeout=30)
         
         if res.status_code != 200:
             print(f"[PTT 响应异常] 关键词: {keyword} | 状态码: {res.status_code} | 返回信息: {res.text[:150]}")
