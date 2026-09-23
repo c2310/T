@@ -14,18 +14,24 @@ HEADERS = {
 
 
 def get_latest_dcview_post(keyword):
-    """抓取 DCView 二手相机最新贴文（支持 ScraperAPI 代理）"""
+    """抓取 DCView 二手相机最新贴文（支持 ScrapingAnt 代理）"""
     encoded_kw = urllib.parse.quote(keyword)
     target_url = f"https://market.dcview.com/search/{encoded_kw}"
 
-    api_key = os.environ.get("SCRAPER_API_KEY")
+    # 优先从环境变量读取 SCRAPINGANT_API_KEY，不存在时尝试兼容旧的 SCRAPER_API_KEY
+    api_key = os.environ.get("SCRAPINGANT_API_KEY") or os.environ.get("SCRAPER_API_KEY")
     if api_key:
-        req_url = f"http://api.scraperapi.com?api_key={api_key}&url={urllib.parse.quote(target_url)}"
+        # 使用 ScrapingAnt v2 接口，browser=false 保持纯 HTTP 快速响应
+        req_url = (
+            f"https://api.scrapingant.com/v2/general"
+            f"?api_key={api_key}"
+            f"&url={urllib.parse.quote(target_url, safe='')}"
+            f"&browser=false"
+        )
     else:
         req_url = target_url
 
     try:
-        # 将 timeout 压缩至 7 秒，避免因个别代理请求拖慢整个线程池
         res = requests.get(req_url, headers=HEADERS, timeout=7)
         if res.status_code == 200:
             soup = BeautifulSoup(res.text, "html.parser")
