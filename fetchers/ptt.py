@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 import urllib.parse
 from bs4 import BeautifulSoup
@@ -10,18 +11,15 @@ HEADERS = {
         "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     ),
     "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Cookie": "over18=1",  # 确保带上 over18 验证 Cookie
+    "Cookie": "over18=1",
 }
 
 
 def get_latest_ptt_post(keyword):
-    """抓取 PTT DC_SALE 板最新贴文（支持 ScrapingAnt 代理）"""
     target_url = f"https://www.ptt.cc/bbs/DC_SALE/search?q={urllib.parse.quote(keyword)}"
 
-    # 优先使用 SCRAPINGANT_API_KEY，未配置时回退尝试 SCRAPER_API_KEY
     api_key = os.environ.get("SCRAPINGANT_API_KEY") or os.environ.get("SCRAPER_API_KEY")
     if api_key:
-        # 使用 ScrapingAnt v2 接口，禁用无头浏览器（browser=false）提升速度
         req_url = (
             f"https://api.scrapingant.com/v2/general"
             f"?api_key={api_key}"
@@ -34,10 +32,17 @@ def get_latest_ptt_post(keyword):
     cookies = {"over18": "1"}
 
     try:
-        # 保持 timeout=7 秒快速响应
-        res = requests.get(req_url, headers=HEADERS, cookies=cookies, timeout=7)
+        res = requests.get(req_url, headers=HEADERS, cookies=cookies, timeout=12)
         if res.status_code == 200:
-            soup = BeautifulSoup(res.text, "html.parser")
+            if api_key:
+                try:
+                    html_text = res.json().get("content", "")
+                except Exception:
+                    html_text = res.text
+            else:
+                html_text = res.text
+
+            soup = BeautifulSoup(html_text, "html.parser")
             title_divs = soup.find_all("div", class_="title")
             for div in title_divs:
                 a_tag = div.find("a")
