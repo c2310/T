@@ -48,6 +48,7 @@ def save_all_states(states):
 
 def send_discord_notify(notifications):
     if not notifications:
+        print("ℹ️ 本次巡检没有产生新推送，跳过 Discord 发送。")
         return
 
     if not DISCORD_WEBHOOK_URL:
@@ -67,7 +68,6 @@ def send_discord_notify(notifications):
             }
         )
 
-    # Discord 限制单条 Payload 最多包含 10 个 Embed 卡片，超出时分批发送
     chunk_size = 10
     for i in range(0, len(embeds), chunk_size):
         chunk = embeds[i : i + chunk_size]
@@ -90,19 +90,18 @@ def send_discord_notify(notifications):
 
 
 def worker_fetch(platform_name, fetch_func, keyword):
-    """单任务 Worker，用于在线程池中并行执行"""
+    """单任务 Worker，保证安全捕获异常，绝不崩溃"""
     try:
         content, content_hash = fetch_func(keyword)
         return keyword, content, content_hash
     except Exception as e:
-        print(f"  ❌ 【{platform_name}】：【{keyword}】 抓取异常: {e}")
+        print(f"  ❌ 【{platform_name}】：【{keyword}】 执行过程抛出异常: {e}")
         return keyword, None, None
 
 
 def check_platform(platform_name, fetch_func, all_states, notifications):
     print(f"\n--- 🌐 开始巡检平台：【{platform_name}】 ---")
-    
-    # 使用线程池加速，设置 max_workers=5 避免并发过高触发 ScraperAPI 的 429
+
     with ThreadPoolExecutor(max_workers=5) as executor:
         futures = {
             executor.submit(worker_fetch, platform_name, fetch_func, kw): kw
@@ -110,7 +109,12 @@ def check_platform(platform_name, fetch_func, all_states, notifications):
         }
 
         for future in as_completed(futures):
-            keyword, content, content_hash = future.result()
+            try:
+                keyword, content, content_hash = future.result()
+            except Exception as e:
+                print(f"  ❌ 线程提取结果失败: {e}")
+                continue
+
             state_key = f"{platform_name}_{keyword}"
 
             if not content:
@@ -155,6 +159,8 @@ def main():
 
     if notifications:
         send_discord_notify(notifications)
+    else:
+        print("\nℹ️ 巡检完毕：没有发现任何平台有新贴文发布。")
 
     save_all_states(all_states)
     print(f"\n🎉 巡检完毕，本次共收集到 {len(notifications)} 条新动态。")
