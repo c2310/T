@@ -31,7 +31,7 @@ def get_latest_yahoo_post(keyword):
         req_headers = HEADERS
 
     try:
-        res = requests.get(req_url, headers=req_headers, timeout=15)
+        res = requests.get(req_url, headers=req_headers, timeout=30)
         
         if res.status_code != 200:
             print(f"[Yahoo 响应异常] 关键词: {keyword} | 状态码: {res.status_code} | 返回信息: {res.text[:150]}")
