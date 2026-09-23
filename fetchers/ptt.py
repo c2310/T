@@ -10,25 +10,31 @@ HEADERS = {
         "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
     ),
     "Accept-Language": "zh-TW,zh;q=0.9,en-US;q=0.8,en;q=0.7",
-    "Cookie": "over18=1",  # 显式放在 Header 中，确保 ScraperAPI 带上 over18 验证
+    "Cookie": "over18=1",  # 确保带上 over18 验证 Cookie
 }
 
 
 def get_latest_ptt_post(keyword):
-    """抓取 PTT DC_SALE 板最新贴文（支持 ScraperAPI 代理）"""
+    """抓取 PTT DC_SALE 板最新贴文（支持 ScrapingAnt 代理）"""
     target_url = f"https://www.ptt.cc/bbs/DC_SALE/search?q={urllib.parse.quote(keyword)}"
 
-    api_key = os.environ.get("SCRAPER_API_KEY")
+    # 优先使用 SCRAPINGANT_API_KEY，未配置时回退尝试 SCRAPER_API_KEY
+    api_key = os.environ.get("SCRAPINGANT_API_KEY") or os.environ.get("SCRAPER_API_KEY")
     if api_key:
-        # 使用 keep_headers=true 确保 Cookie 被透传给 PTT
-        req_url = f"http://api.scraperapi.com?api_key={api_key}&url={urllib.parse.quote(target_url)}&keep_headers=true"
+        # 使用 ScrapingAnt v2 接口，禁用无头浏览器（browser=false）提升速度
+        req_url = (
+            f"https://api.scrapingant.com/v2/general"
+            f"?api_key={api_key}"
+            f"&url={urllib.parse.quote(target_url, safe='')}"
+            f"&browser=false"
+        )
     else:
         req_url = target_url
 
     cookies = {"over18": "1"}
 
     try:
-        # 将 timeout 压低至 7 秒，避免卡死工作流
+        # 保持 timeout=7 秒快速响应
         res = requests.get(req_url, headers=HEADERS, cookies=cookies, timeout=7)
         if res.status_code == 200:
             soup = BeautifulSoup(res.text, "html.parser")
