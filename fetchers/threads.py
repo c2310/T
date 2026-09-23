@@ -13,14 +13,20 @@ def is_chinese_text(text):
 
 
 def get_latest_keyword_post(keyword):
-    """抓取 Threads 最新关键词贴文（只过滤中文字符，并生成直接跳转的贴文链接）"""
+    """抓取 Threads 最新关键词贴文（支持 ScrapingAnt 代理）"""
     encoded_keyword = urllib.parse.quote(keyword)
     target_url = f"https://www.threads.net/search?q={encoded_keyword}&serp_type=default&hl=zh-tw"
 
-    api_key = os.environ.get("SCRAPER_API_KEY")
+    # 优先读取 SCRAPINGANT_API_KEY，未配置时回退到 SCRAPER_API_KEY
+    api_key = os.environ.get("SCRAPINGANT_API_KEY") or os.environ.get("SCRAPER_API_KEY")
     if api_key:
-        # 加入 keep_headers=true，避免 ScraperAPI 后台做无意义的长重试
-        req_url = f"http://api.scraperapi.com?api_key={api_key}&url={urllib.parse.quote(target_url)}&keep_headers=true"
+        # 使用 ScrapingAnt v2 接口，browser=false 保持纯 HTTP 模式，省额度且响应快
+        req_url = (
+            f"https://api.scrapingant.com/v2/general"
+            f"?api_key={api_key}"
+            f"&url={urllib.parse.quote(target_url, safe='')}"
+            f"&browser=false"
+        )
     else:
         req_url = target_url
 
@@ -35,7 +41,7 @@ def get_latest_keyword_post(keyword):
     }
 
     try:
-        # 将 timeout 压低至 6 秒，快速响应与释放并发线程
+        # 保留 6 秒超时限制，配合并发池快速响应
         response = requests.get(req_url, headers=headers, timeout=6)
         if response.status_code != 200:
             return None, None
