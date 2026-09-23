@@ -7,20 +7,15 @@ import requests
 
 
 def is_chinese_text(text):
-    """判断文本中是否包含中文（繁体或简体）"""
-    # 匹配 CJK 统一表意文字范围
     return bool(re.search(r"[\u4e00-\u9fa5]", text))
 
 
 def get_latest_keyword_post(keyword):
-    """抓取 Threads 最新关键词贴文（支持 ScrapingAnt 代理）"""
     encoded_keyword = urllib.parse.quote(keyword)
     target_url = f"https://www.threads.net/search?q={encoded_keyword}&serp_type=default&hl=zh-tw"
 
-    # 优先读取 SCRAPINGANT_API_KEY，未配置时回退到 SCRAPER_API_KEY
     api_key = os.environ.get("SCRAPINGANT_API_KEY") or os.environ.get("SCRAPER_API_KEY")
     if api_key:
-        # 使用 ScrapingAnt v2 接口，browser=false 保持纯 HTTP 模式，省额度且响应快
         req_url = (
             f"https://api.scrapingant.com/v2/general"
             f"?api_key={api_key}"
@@ -41,13 +36,19 @@ def get_latest_keyword_post(keyword):
     }
 
     try:
-        # 保留 6 秒超时限制，配合并发池快速响应
-        response = requests.get(req_url, headers=headers, timeout=6)
+        response = requests.get(req_url, headers=headers, timeout=12)
         if response.status_code != 200:
             return None, None
 
-        # 尝试从页面全局数据中寻找具体的贴文 Shortcode / Post ID
-        post_code_match = re.search(r'"code"\s*:\s*"([A-Za-z0-9_-]{10,12})"', response.text)
+        if api_key:
+            try:
+                raw_text = response.json().get("content", "")
+            except Exception:
+                raw_text = response.text
+        else:
+            raw_text = response.text
+
+        post_code_match = re.search(r'"code"\s*:\s*"([A-Za-z0-9_-]{10,12})"', raw_text)
         if post_code_match:
             post_shortcode = post_code_match.group(1)
             direct_post_url = f"https://www.threads.net/@/post/{post_shortcode}"
@@ -56,7 +57,7 @@ def get_latest_keyword_post(keyword):
 
         scripts = re.findall(
             r'<script type="application/json"[^>]*>(.*?)</script>',
-            response.text,
+            raw_text,
             re.DOTALL,
         )
         for script in scripts:
@@ -74,9 +75,6 @@ def get_latest_keyword_post(keyword):
                             .strip()
                         )
 
-                    # 过滤条件：
-                    # 1. 长度大于 5 且不是 http 链接
-                    # 2. 必须包含繁体/简体中文字符（排除日、韩、英等外文贴文）
                     if len(text) > 5 and not text.startswith("http") and is_chinese_text(text):
                         content = f"正文: {text}\n贴文链接: {direct_post_url}"
                         content_hash = hashlib.md5(
