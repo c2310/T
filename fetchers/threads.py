@@ -36,7 +36,7 @@ def get_latest_keyword_post(keyword):
         }
 
     try:
-        response = requests.get(req_url, headers=headers, timeout=15)
+        response = requests.get(req_url, headers=headers, timeout=30)
         
         if response.status_code != 200:
             print(f"[Threads 响应异常] 关键词: {keyword} | 状态码: {response.status_code} | 返回信息: {response.text[:150]}")
