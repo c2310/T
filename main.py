@@ -112,7 +112,7 @@ def check_platform(platform_name, fetch_func, all_states, notifications):
                     print(f"  └─ 【{platform_name}】：【{keyword}】 无变化。")
             
             # ⚠️ 每次请求间预留 2.5 秒缓冲，确保 ScrapingAnt 完全释放连接
-            time.sleep(2.5)
+            time.sleep(3.5)
 
         except Exception as e:
             print(f"  ❌ 【{platform_name}】：【{keyword}】 抓取过程报错: {e}")
