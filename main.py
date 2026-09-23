@@ -48,14 +48,13 @@ def save_all_states(states):
 
 def send_discord_notify(notifications):
     if not notifications:
-        print("ℹ️ 本次巡检没有产生新推送，跳过 Discord 发送。")
+        print("ℹ️ 本次没有新贴文，跳过 Discord 推送。")
         return
 
     if not DISCORD_WEBHOOK_URL:
         print("❌ 错误：未配置 DISCORD_WEBHOOK_URL 环境变量！")
         return
 
-    # 组装 Discord 富文本 Embed 卡片
     embeds = []
     for item in notifications:
         clean_content = item["content"][:500]
@@ -90,12 +89,12 @@ def send_discord_notify(notifications):
 
 
 def worker_fetch(platform_name, fetch_func, keyword):
-    """单任务 Worker，保证安全捕获异常，绝不崩溃"""
+    """单任务 Worker，保证安全捕获异常"""
     try:
         content, content_hash = fetch_func(keyword)
         return keyword, content, content_hash
     except Exception as e:
-        print(f"  ❌ 【{platform_name}】：【{keyword}】 执行过程抛出异常: {e}")
+        print(f"  ❌ 【{platform_name}】：【{keyword}】 抓取过程报错: {e}")
         return keyword, None, None
 
 
@@ -112,7 +111,7 @@ def check_platform(platform_name, fetch_func, all_states, notifications):
             try:
                 keyword, content, content_hash = future.result()
             except Exception as e:
-                print(f"  ❌ 线程提取结果失败: {e}")
+                print(f"  ❌ 提取结果失败: {e}")
                 continue
 
             state_key = f"{platform_name}_{keyword}"
@@ -160,7 +159,7 @@ def main():
     if notifications:
         send_discord_notify(notifications)
     else:
-        print("\nℹ️ 巡检完毕：没有发现任何平台有新贴文发布。")
+        print("\nℹ️ 巡检完毕：数据没有变动，不触发 Discord 发送。")
 
     save_all_states(all_states)
     print(f"\n🎉 巡检完毕，本次共收集到 {len(notifications)} 条新动态。")
