@@ -1,4 +1,5 @@
 import hashlib
+import json
 import os
 import urllib.parse
 from bs4 import BeautifulSoup
@@ -14,14 +15,11 @@ HEADERS = {
 
 
 def get_latest_yahoo_post(keyword):
-    """抓取 Yahoo 奇摩拍卖最新商品（支持 ScrapingAnt 代理）"""
     encoded_kw = urllib.parse.quote(keyword)
     target_url = f"https://tw.bid.yahoo.com/search/auction/product?p={encoded_kw}&sort=-curprice"
 
-    # 优先使用 SCRAPINGANT_API_KEY，未配置时回退到 SCRAPER_API_KEY
     api_key = os.environ.get("SCRAPINGANT_API_KEY") or os.environ.get("SCRAPER_API_KEY")
     if api_key:
-        # 使用 ScrapingAnt v2 接口，browser=false 使用纯 HTTP 请求以节省 Credit 并加快速度
         req_url = (
             f"https://api.scrapingant.com/v2/general"
             f"?api_key={api_key}"
@@ -32,10 +30,17 @@ def get_latest_yahoo_post(keyword):
         req_url = target_url
 
     try:
-        # 将 timeout 缩短至 7 秒，避免卡死线程池
-        res = requests.get(req_url, headers=HEADERS, timeout=7)
+        res = requests.get(req_url, headers=HEADERS, timeout=12)
         if res.status_code == 200:
-            soup = BeautifulSoup(res.text, "html.parser")
+            if api_key:
+                try:
+                    html_text = res.json().get("content", "")
+                except Exception:
+                    html_text = res.text
+            else:
+                html_text = res.text
+
+            soup = BeautifulSoup(html_text, "html.parser")
             items = soup.find_all(
                 "a", href=lambda h: h and "/item/" in h and "item" in h
             )
