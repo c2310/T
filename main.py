@@ -3,14 +3,12 @@ import os
 import sys
 import time
 import requests
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from fetchers.dcview import get_latest_dcview_post
 from fetchers.ptt import get_latest_ptt_post
 from fetchers.threads import get_latest_keyword_post as get_threads_post
 from fetchers.yahoo import get_latest_yahoo_post
 
-# 全局关键词配置
 TARGET_KEYWORDS = [
     "Canon G12",
     "Canon G15",
@@ -87,53 +85,37 @@ def send_discord_notify(notifications):
             print(f"❌ Discord 请求发送异常: {e}")
 
 
-def worker_fetch(platform_name, fetch_func, keyword):
-    try:
-        content, content_hash = fetch_func(keyword)
-        time.sleep(1)
-        return keyword, content, content_hash
-    except Exception as e:
-        print(f"  ❌ 【{platform_name}】：【{keyword}】 抓取过程报错: {e}")
-        return keyword, None, None
-
-
 def check_platform(platform_name, fetch_func, all_states, notifications):
     print(f"\n--- 🌐 开始巡检平台：【{platform_name}】 ---")
 
-    with ThreadPoolExecutor(max_workers=1) as executor:
-        futures = {
-            executor.submit(worker_fetch, platform_name, fetch_func, kw): kw
-            for kw in TARGET_KEYWORDS
-        }
-
-        for future in as_completed(futures):
-            try:
-                keyword, content, content_hash = future.result()
-            except Exception as e:
-                print(f"  ❌ 提取结果失败: {e}")
-                continue
-
+    # ⚠️ 废除 ThreadPoolExecutor，使用绝对严格的串行循环，防止 ScrapingAnt 报并发 409
+    for keyword in TARGET_KEYWORDS:
+        try:
+            content, content_hash = fetch_func(keyword)
             state_key = f"{platform_name}_{keyword}"
 
             if not content:
-                print(
-                    f"  ⚠️ 【{platform_name}】：【{keyword}】 未能获取到有效数据。"
-                )
-                continue
-
-            last_hash = all_states.get(state_key, {}).get("hash")
-            if content_hash != last_hash:
-                print(f"  🔔 【{platform_name}】检测到 【{keyword}】 有新动态！")
-                notifications.append(
-                    {
-                        "platform": platform_name,
-                        "keyword": keyword,
-                        "content": content,
-                    }
-                )
-                all_states[state_key] = {"hash": content_hash}
+                print(f"  ⚠️ 【{platform_name}】：【{keyword}】 未能获取到有效数据。")
             else:
-                print(f"  └─ 【{platform_name}】：【{keyword}】 无变化。")
+                last_hash = all_states.get(state_key, {}).get("hash")
+                if content_hash != last_hash:
+                    print(f"  🔔 【{platform_name}】检测到 【{keyword}】 有新动态！")
+                    notifications.append(
+                        {
+                            "platform": platform_name,
+                            "keyword": keyword,
+                            "content": content,
+                        }
+                    )
+                    all_states[state_key] = {"hash": content_hash}
+                else:
+                    print(f"  └─ 【{platform_name}】：【{keyword}】 无变化。")
+            
+            # ⚠️ 每次请求间预留 2.5 秒缓冲，确保 ScrapingAnt 完全释放连接
+            time.sleep(2.5)
+
+        except Exception as e:
+            print(f"  ❌ 【{platform_name}】：【{keyword}】 抓取过程报错: {e}")
 
 
 def main():
@@ -147,18 +129,12 @@ def main():
     notifications = []
 
     if mode in ["--fast", "--all"]:
-        check_platform(
-            "DCView", get_latest_dcview_post, all_states, notifications
-        )
-        check_platform(
-            "PTT_DC_SALE", get_latest_ptt_post, all_states, notifications
-        )
+        check_platform("DCView", get_latest_dcview_post, all_states, notifications)
+        check_platform("PTT_DC_SALE", get_latest_ptt_post, all_states, notifications)
 
     if mode in ["--threads", "--slow", "--all"]:
         check_platform("Threads", get_threads_post, all_states, notifications)
-        check_platform(
-            "Yahoo", get_latest_yahoo_post, all_states, notifications
-        )
+        check_platform("Yahoo", get_latest_yahoo_post, all_states, notifications)
 
     if notifications:
         send_discord_notify(notifications)
