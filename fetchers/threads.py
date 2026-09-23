@@ -15,29 +15,31 @@ def get_latest_keyword_post(keyword):
     target_url = f"https://www.threads.net/search?q={encoded_keyword}&serp_type=default&hl=zh-tw"
 
     api_key = os.environ.get("SCRAPINGANT_API_KEY") or os.environ.get("SCRAPER_API_KEY")
+    
     if api_key:
         req_url = (
             f"https://api.scrapingant.com/v2/general"
-            f"?api_key={api_key}"
-            f"&url={urllib.parse.quote(target_url, safe='')}"
+            f"?url={urllib.parse.quote(target_url, safe='')}"
             f"&browser=false"
         )
+        headers = {"x-api-key": api_key}
     else:
         req_url = target_url
-
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
-        ),
-        "Accept": "*/*",
-        "Accept-Language": "zh-TW,zh;q=0.9,zh-CN;q=0.8,en-US;q=0.7",
-        "X-IG-App-ID": "238260118697367",
-    }
+        headers = {
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+            ),
+            "Accept": "*/*",
+            "Accept-Language": "zh-TW,zh;q=0.9,zh-CN;q=0.8,en-US;q=0.7",
+            "X-IG-App-ID": "238260118697367",
+        }
 
     try:
-        response = requests.get(req_url, headers=headers, timeout=12)
+        response = requests.get(req_url, headers=headers, timeout=15)
+        
         if response.status_code != 200:
+            print(f"[Threads 响应异常] 关键词: {keyword} | 状态码: {response.status_code} | 返回信息: {response.text[:150]}")
             return None, None
 
         if api_key:
