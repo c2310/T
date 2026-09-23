@@ -27,8 +27,6 @@ TARGET_KEYWORDS = [
 ]
 
 HISTORY_FILE = "threads_state.json"
-
-# 从 GitHub Secrets / 环境变量中读取 Discord Webhook URL
 DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
 
 
@@ -63,7 +61,7 @@ def send_discord_notify(notifications):
             {
                 "title": f"🔔 [{item['platform']}] 检测到新动态：{item['keyword']}",
                 "description": clean_content,
-                "color": 3447003,  # 蓝色边框 (#3498DB)
+                "color": 3447003,
                 "footer": {"text": "多平台二手相机监控助手"},
             }
         )
@@ -90,10 +88,9 @@ def send_discord_notify(notifications):
 
 
 def worker_fetch(platform_name, fetch_func, keyword):
-    """单任务 Worker，保证安全捕获异常并在请求间提供适当缓冲"""
     try:
         content, content_hash = fetch_func(keyword)
-        time.sleep(1)  # 每次请求后休眠 1 秒，适配单线程限流策略
+        time.sleep(1)
         return keyword, content, content_hash
     except Exception as e:
         print(f"  ❌ 【{platform_name}】：【{keyword}】 抓取过程报错: {e}")
@@ -103,7 +100,6 @@ def worker_fetch(platform_name, fetch_func, keyword):
 def check_platform(platform_name, fetch_func, all_states, notifications):
     print(f"\n--- 🌐 开始巡检平台：【{platform_name}】 ---")
 
-    # ⚠️ 将 max_workers 调整为 1，完全适配 ScrapingAnt Free Plan 的单并发限制
     with ThreadPoolExecutor(max_workers=1) as executor:
         futures = {
             executor.submit(worker_fetch, platform_name, fetch_func, kw): kw
@@ -141,6 +137,11 @@ def check_platform(platform_name, fetch_func, all_states, notifications):
 
 
 def main():
+    ant_key = os.environ.get("SCRAPINGANT_API_KEY")
+    scraper_key = os.environ.get("SCRAPER_API_KEY")
+    print(f"🔍 环境变量检查: SCRAPINGANT_API_KEY 长度 = {len(ant_key) if ant_key else 0}")
+    print(f"🔍 环境变量检查: SCRAPER_API_KEY 长度 = {len(scraper_key) if scraper_key else 0}")
+
     mode = sys.argv[1] if len(sys.argv) > 1 else "--all"
     all_states = load_all_states()
     notifications = []
