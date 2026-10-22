@@ -90,12 +90,15 @@
     "hash": "df6522ec9c9c91fb65d5c4a8ff430133"
   },
   "Threads_Canon S95": {
-    "hash": "dabf65c7ec559fc23685718f8fa8bc02"
+    "hash": "eea06c20256da9ab48baf05d8123d0a1"
   },
   "Threads_Ricoh GR": {
     "hash": "58185e497e578bba72505719c5eb7526"
   },
   "Threads_Canon G7x": {
     "hash": "016551de6b4a1ff89cf84703f28b3be1"
+  },
+  "Threads_Canon G16": {
+    "hash": "7d93eaec2ae26cbb53aafb312c35fca4"
   }
 }
